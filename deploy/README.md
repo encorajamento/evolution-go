@@ -42,25 +42,7 @@ Teste:
 psql -h 192.168.10.100 -U evolution -d evogo_auth -c "SELECT current_user;"
 ```
 
-### 2. Volume `evolution_data` no nó manager do Swarm
-
-O volume guarda dados auxiliares do `/app/dbdata` (algumas configs e cache que
-o evolution-go cria fora do Postgres). É declarado `external: true` na stack
-pra sobreviver a `stack rm`.
-
-Via Portainer UI:
-1. Menu → **Volumes** → **Add volume**
-2. Name: `evolution_data`
-3. Driver: `local`
-4. Create
-
-Ou via CLI no nó manager:
-
-```bash
-docker volume create evolution_data
-```
-
-### 3. Rede `public`
+### 2. Rede `public`
 
 Compartilhada com Traefik. Já deve existir (todas as stacks da Missão usam).
 Confirmar:
@@ -69,13 +51,13 @@ Confirmar:
 docker network ls | grep public
 ```
 
-### 4. Credenciais no Jenkins
+### 3. Credenciais no Jenkins
 
 Reusa credenciais do GE:
 - `ghcr-token` — secret text (Personal Access Token do GitHub com `write:packages`).
 - `swarm-deploy-key` — SSH private key (chave do user `deploy` no `192.168.10.120`).
 
-### 5. GHCR — imagem precisa ser acessível pelo Swarm
+### 4. GHCR — imagem precisa ser acessível pelo Swarm
 
 Após o primeiro push, garantir que a imagem `ghcr.io/encorajamento/evolution-go`
 está visível pro user que faz `docker login` no swarm. Se for privada,
@@ -88,7 +70,7 @@ configurar acesso via `--with-registry-auth` no deploy (já está no Jenkinsfile
 | `GLOBAL_API_KEY` | `swarm.prod.yml` | API key global da Evolution. Rotacionar via Portainer se vazar. |
 | `POSTGRES_AUTH_DB` | `swarm.prod.yml` | Connection string DB whatsmeow (sessões). |
 | `POSTGRES_USERS_DB` | `swarm.prod.yml` | Connection string DB de instâncias/labels. |
-| `WEBHOOK_URL` | **PLACEHOLDER** | Editar via Portainer após deploy. Aponta pro `/api/public/whatsapp/webhook/<secret>` do backend GE. |
+| `WEBHOOK_URL` | _não setado_ | Sem fallback global. Cada instância tem o próprio `webhook` (configurado pelo admin via UI/API). Formato recomendado pra rotear interno: `http://grupos-encorajamento-api_api:3000/api/public/whatsapp/webhook/<secret>`. |
 | `MINIO_*` | `swarm.prod.yml` | Bucket S3 pra mídia. |
 | `CONNECT_ON_STARTUP` | `swarm.prod.yml` | `true` — reconecta instâncias salvas no boot. |
 

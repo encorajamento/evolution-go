@@ -3,8 +3,9 @@ version: "3.8"
 # Stack do Evolution GO (fork da Missão Encorajamento).
 #
 # Postgres é externo (192.168.10.100). Stack só contém o app.
-# Volume `evolution_data` é declarado EXTERNAL — criar uma vez via Portainer
-# antes do primeiro deploy. Veja deploy/README.md.
+# Volumes são gerenciados pela stack (prefixados com `evolution-go_`) —
+# perdidos em `stack rm`. Pra `/app/dbdata` isso não é crítico: o estado
+# persistente real está no Postgres externo.
 
 services:
   evolution-go:
@@ -28,9 +29,10 @@ services:
       - CONNECT_ON_STARTUP=true
       - OS_NAME=Linux
 
-      # PLACEHOLDER — atualizar via Portainer com a URL pública do webhook
-      # do backend GE em prod: https://grupos.encorajamento.com.br/api/public/whatsapp/webhook/<SECRET>
-      - WEBHOOK_URL=__SET_WEBHOOK_URL_VIA_PORTAINER__
+      # Sem WEBHOOK_URL global aqui. O webhook é configurado por instância
+      # (campo `webhook` em wpp_instances), feito pelo admin via UI da
+      # Evolution. Formato recomendado pra rotear interno no Swarm:
+      #   http://grupos-encorajamento-api_api:3000/api/public/whatsapp/webhook/<SECRET>
 
       # MinIO/S3 — mídia das mensagens persistida fora do WhatsApp (URLs do WA expiram)
       - MINIO_ENABLED=true
@@ -43,9 +45,10 @@ services:
 
       - TZ=America/Sao_Paulo
     volumes:
-      # external: true — sobrevive a `stack rm`. Criar manualmente uma vez.
+      # Gerenciado pela stack (prefixo `evolution-go_`). Persiste enquanto a
+      # stack existir. Não confundir com o Postgres externo, que é onde o
+      # estado real (sessões whatsmeow, instâncias) mora.
       - evolution_data:/app/dbdata
-      # Logs ficam dentro da stack (sem prioridade pra preservar).
       - evolution_logs:/app/logs
     healthcheck:
       test:
@@ -95,8 +98,6 @@ services:
 
 volumes:
   evolution_data:
-    external: true
-    name: evolution_data
   evolution_logs:
 
 networks:
