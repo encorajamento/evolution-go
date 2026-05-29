@@ -1,0 +1,104 @@
+version: "3.8"
+
+# Stack do Evolution GO (fork da Missão Encorajamento).
+#
+# Postgres é externo (192.168.10.100). Stack só contém o app.
+# Volume `evolution_data` é declarado EXTERNAL — criar uma vez via Portainer
+# antes do primeiro deploy. Veja deploy/README.md.
+
+services:
+  evolution-go:
+    image: ghcr.io/encorajamento/evolution-go:latest
+    networks:
+      - public
+    environment:
+      - SERVER_PORT=4000
+      - GLOBAL_API_KEY=global_6b599a5c96c93a508491dc4d1ecc5462
+
+      # Postgres externo na LAN — usuário/senha foram provisionados manualmente
+      # via psql (ver deploy/README.md). Não usar caracteres especiais que
+      # precisem URL-encoding na senha (mantém connection string limpa).
+      - POSTGRES_AUTH_DB=postgresql://evolution:evogo_5J9qK2pX7sH8nM3rL6tF@192.168.10.100:5432/evogo_auth?sslmode=disable
+      - POSTGRES_USERS_DB=postgresql://evolution:evogo_5J9qK2pX7sH8nM3rL6tF@192.168.10.100:5432/evogo_users?sslmode=disable
+
+      - DATABASE_SAVE_MESSAGES=false
+      - WADEBUG=INFO
+      - LOGTYPE=console
+      # Boot: reconecta automaticamente as instâncias que estavam conectadas.
+      - CONNECT_ON_STARTUP=true
+      - OS_NAME=Linux
+
+      # PLACEHOLDER — atualizar via Portainer com a URL pública do webhook
+      # do backend GE em prod: https://grupos.encorajamento.com.br/api/public/whatsapp/webhook/<SECRET>
+      - WEBHOOK_URL=__SET_WEBHOOK_URL_VIA_PORTAINER__
+
+      # MinIO/S3 — mídia das mensagens persistida fora do WhatsApp (URLs do WA expiram)
+      - MINIO_ENABLED=true
+      - MINIO_ENDPOINT=s3.encorajamento.com.br
+      - MINIO_ACCESS_KEY=alfa
+      - MINIO_SECRET_KEY=&yA1x2Y8
+      - MINIO_BUCKET=grupos-de-encorajamento
+      - MINIO_REGION=us-east-1
+      - MINIO_USE_SSL=true
+
+      - TZ=America/Sao_Paulo
+    volumes:
+      # external: true — sobrevive a `stack rm`. Criar manualmente uma vez.
+      - evolution_data:/app/dbdata
+      # Logs ficam dentro da stack (sem prioridade pra preservar).
+      - evolution_logs:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:4000/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+      placement:
+        constraints:
+          # Fixa no manager — volume `evolution_data` é local ao nó.
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 256M
+      update_config:
+        parallelism: 1
+        delay: 10s
+        # stop-first porque whatsmeow não tolera duas instâncias da mesma
+        # sessão simultaneamente — WhatsApp desconecta uma se vir o conflito.
+        order: stop-first
+        failure_action: rollback
+        monitor: 90s
+      rollback_config:
+        parallelism: 1
+        delay: 10s
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.evolutiongoencorajamentocombr.rule=Host(`ev.encorajamento.com.br`)"
+        - "traefik.http.services.evolutiongoencorajamentocombr.loadbalancer.server.port=4000"
+        - "traefik.http.services.evolutiongoencorajamentocombr.loadbalancer.passHostHeader=true"
+
+volumes:
+  evolution_data:
+    external: true
+    name: evolution_data
+  evolution_logs:
+
+networks:
+  public:
+    external: true
