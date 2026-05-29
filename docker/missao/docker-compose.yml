@@ -1,0 +1,79 @@
+services:
+  evolution-go:
+    # Build local do próprio repo (contexto = raiz do evolution-go)
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      args:
+        VERSION: missao-local
+    image: evolution-go:missao-local
+    container_name: evolution-go
+    restart: unless-stopped
+    ports:
+      # Host 4005 -> container 4000 (backend Nest usa 4000 no host,
+      # então não dá pra publicar Evolution também em 4000).
+      - "4005:4000"
+    environment:
+      SERVER_PORT: 4000
+      GLOBAL_API_KEY: ${EVOLUTION_GLOBAL_API_KEY}
+      POSTGRES_AUTH_DB: "postgresql://admin:admin@postgres:5432/evogo_auth?sslmode=disable"
+      POSTGRES_USERS_DB: "postgresql://admin:admin@postgres:5432/evogo_users?sslmode=disable"
+      DATABASE_SAVE_MESSAGES: "false"
+      WADEBUG: "INFO"
+      LOGTYPE: "console"
+      # Reconecta automaticamente no boot todas as instâncias que estavam
+      # conectadas quando o container caiu. Sem isso, após restart as
+      # instâncias ficam no status "desconectado" até alguém chamar /connect.
+      CONNECT_ON_STARTUP: "true"
+      OS_NAME: "Linux"
+      # Webhook global: todos os eventos de todas as instâncias caem aqui.
+      # host.containers.internal resolve pro host que roda o backend Nest.
+      WEBHOOK_URL: ${EVOLUTION_WEBHOOK_URL}
+      # Storage S3/MinIO para mídia — resolve o problema de URLs do WhatsApp
+      # expirarem. Evolution baixa no momento que a msg chega e sobe aqui;
+      # no webhook já vem mediaUrl permanente.
+      MINIO_ENABLED: ${MINIO_ENABLED:-false}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+      MINIO_BUCKET: ${MINIO_BUCKET:-}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-true}
+    volumes:
+      - evolution_data:/app/dbdata
+      - evolution_logs:/app/logs
+    networks:
+      - evolution_network
+    # Permite que o container enxergue o host por host.containers.internal
+    # (Podman/Docker Desktop já fazem isso automático no macOS; no Linux
+    # essas entradas cobrem o cenário)
+    extra_hosts:
+      - "host.containers.internal:host-gateway"
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: evolution-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - evolution_network
+
+volumes:
+  evolution_data:
+  evolution_logs:
+  postgres_data:
+
+networks:
+  evolution_network:
+    driver: bridge
