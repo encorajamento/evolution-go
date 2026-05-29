@@ -10,6 +10,10 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
+                // whatsmeow-lib é submodule git — `checkout scm` por padrão
+                // não inicializa submódulos. Sem isso o Dockerfile falha
+                // no COPY whatsmeow-lib/ pra pasta vazia.
+                sh 'git submodule update --init --recursive'
             }
         }
 
